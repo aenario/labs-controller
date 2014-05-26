@@ -9,8 +9,8 @@ install = (name, app, cb) ->
         if not docExist
             if name in ['home', 'proxy', 'datasystem']
                 app.password = utils.getToken()
-
-            commander.install "aenario/#{name}", 'latest', {}, (err) =>
+            docker = app.repository.url.split('/')[3]
+            commander.install "#{docker}/#{name}", 'latest', {}, (err) =>
                 cb (err)
         else
             cb()
@@ -37,7 +37,8 @@ module.exports.start = (req, res, next) ->
                     res.send 200, app
             else
                 env = "NAME=#{name} TOKEN=#{app.password}"
-                commander.startApplication "aenario/#{name}", env, (err, image, port) =>
+                docker = app.repository.url.split('/')[3]
+                commander.startApplication "#{docker}/#{name}", env, (err, image, port) =>
                     next err if err?
                     app.port = port
                     res.send 200, drone: app
