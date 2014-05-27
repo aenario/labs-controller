@@ -9,12 +9,12 @@ commander = new DockerCommander()
 log = console.log.bind console
 
 
-commander.install 'mycozycloud/couchdb', 'latest', {}, (err) ->
+commander.install 'cozy/couchdb', 'latest', {}, (err) ->
     # console.log arguments
     return log err if err
 
 
-    commander.install 'mycozycloud/datasystem', 'latest', {}, (err) ->
+    commander.install 'cozy/datasystem', 'latest', {}, (err) ->
         # console.log arguments
         return log err if err
 
@@ -26,7 +26,7 @@ commander.install 'mycozycloud/couchdb', 'latest', {}, (err) ->
                 # console.log arguments
                 return log err if err
 
-                commander.install 'mycozycloud/home', 'latest', {}, (err, home) ->
+                commander.install 'cozy/home', 'latest', {}, (err, home) ->
                     return log err if err
 
                     commander.ambassador 'proxy', 9104, (err) ->

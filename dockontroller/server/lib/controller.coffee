@@ -5,6 +5,13 @@ logrotate = require 'logrotate-stream'
 request = require 'request'
 utils = require '../middlewares/utils'
 
+# if the app just wont start at all, we restart it after RESTART_TIMEOUT
+RESTART_TIMEOUT = 3 * 1000
+# number of time we start to relaunch an app before considering it broken
+MAX_RELAUNCH = 3
+# after SPINNING_TIMEOUT, relaunch counter is reset
+SPINNING_TIMEOUT = 60 * 1000
+
 module.exports = class DockerCommander
 
     # docker connection options
@@ -15,6 +22,10 @@ module.exports = class DockerCommander
         @docker = new Docker {@socketPath, @version}
         @proxy = new ProxyManager
 
+        @expectedStops = {}
+        @relaunches = {}
+        @docker.getEvents @handleEventsStream
+
     # get the ip of the host as visible by containers
     getContainerVisibleIp: ->
         addresses = require('os').networkInterfaces()['docker0']
@@ -24,10 +35,10 @@ module.exports = class DockerCommander
     # wait for an application to be really started
     # ie. listening on http
     waitListening: (url, timeout, callback) ->
+        console.log "WAITING FOR ", url
         i = 0
         do ping = ->
             i += 500
-            console.log "PING", url, i, '/', timeout
             return callback new Error('timeout') if i > timeout
             request.get url, (err, response, body) ->
                 if err then setTimeout ping, 500
@@ -93,7 +104,7 @@ module.exports = class DockerCommander
         ip = @getContainerVisibleIp()
         options =
             name: slug
-            Image: 'aenario/ambassador'
+            Image: 'cozy/ambassador'
             Env: "#{slug.toUpperCase()}_PORT_#{port}_TCP=tcp://#{ip}:#{port}"
             ExposedPorts: {}
 
@@ -157,7 +168,7 @@ module.exports = class DockerCommander
     stop: (slug, callback) ->
         container = @docker.getContainer slug
 
-        container.inspect (err, data) ->
+        container.inspect (err, data) =>
             return callback err if err
             image = data.Image
 
@@ -170,6 +181,8 @@ module.exports = class DockerCommander
             if not data.State.Running
                 return doRemove()
 
+
+            @expectedStops[data.Id] = true
             container.stop t: 1, (err) ->
                 return callback err if err
                 doRemove()
@@ -185,17 +198,78 @@ module.exports = class DockerCommander
         @docker.listContainers (err, containers) ->
             return callback err if err
             result = containers.map (container) ->
-                name: container.Names[0].split('/')[..-1]
+                name: container.Names[0].split('/')[-1..][0]
                 port: container.Ports[0].PublicPort
 
             callback null, result
 
+
+    handleEventsStream: (err, stream) =>
+
+        if err
+            console.log "FAILLED TO CONNECT EVENTS", err
+            return
+
+        # @TODO : what to do on error ?
+        stream.on 'end', =>
+            # docker has terminated the stream
+            # attempt to reconnect
+            @docker.getEvents @handleEventsStream
+
+        stream.on 'data', @handleEvent
+
+    handleEvent: (data) =>
+        try event = JSON.parse data.toString()
+        catch e then return #meh?
+
+        # event shall be an object with fields
+        # status in create, start, stop, destroy
+        # id: container id
+        # from: container's image ("cozy/foo:version")
+        # time: timestamp of this event
+
+        if event.status is 'stop'
+
+            if @expectedStops[event.id]
+                @expectedStops[event.id] = false
+                return # all is well
+
+            # this is an unexpected stop (ie. the app broke)
+            console.log "Unexpected stop of ", event.from
+            @relaunches[event.id] ?= count: 0, timeout: null #defaults
+
+            {count, timeout} = @relaunches[event.id]
+            clearTimeout timeout if timeout
+
+            if count > MAX_RELAUNCH
+                console.log "App ", event.from, "failled too many times"
+                # @ TODO mark this app as broken
+                # @ TODO other cozy wide stategies
+                # (restart stack, revert last DS op)
+            else
+                # we restart the container
+                @docker.getContainer(event.id).start (err) =>
+
+                    if err
+                        # failled to start, let's try again later
+                        console.log "Failled to start app", event.from
+                        tryAgain = => @handleEvent event
+                        return setTimeout tryAgain, RESTART_TIMEOUT
+
+                    else
+                        console.log "App restarted", event.from
+                        @relaunches[event.id].timeout = setTimeout =>
+                            console.log "Resetting counter for ", event.from
+                            @relaunches[event.id] = count: 0, timeout: null
+                        , SPINNING_TIMEOUT
+
+
     # preconfigured start for stack
     startCouch: (callback) ->
-        @start 'mycozycloud/couchdb', {}, callback
+        @start 'cozy/couchdb', {}, callback
 
     startDataSystem: (callback) ->
-        @start 'mycozycloud/datasystem',
+        @start 'cozy/datasystem',
             Links: ['couchdb:couch']
             Env: 'NAME=data-system TOKEN=' + utils.getToken()
         , (err, data) =>
@@ -206,7 +280,7 @@ module.exports = class DockerCommander
             callback null, data
 
     startHome: (callback) ->
-        @start 'mycozycloud/home',
+        @start 'cozy/home',
             PublishAllPorts: true
             Links: ['datasystem:datasystem', 'proxy:proxy', 'controller:controller']
             Env: 'NAME=home TOKEN=' + utils.getToken()
