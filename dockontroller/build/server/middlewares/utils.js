@@ -23,8 +23,11 @@ module.exports.initToken = (function(_this) {
 
 module.exports.checkToken = (function(_this) {
   return function(req, res, next) {
-    var err, _ref;
-    if ((((_ref = req.headers) != null ? _ref['x-auth-token'] : void 0) != null) && req.headers['x-auth-token'] === token) {
+    var err, _ref, _ref1;
+    if ((_ref = process.env.NODE_ENV) !== 'production' && _ref !== 'test') {
+      return next();
+    }
+    if ((((_ref1 = req.headers) != null ? _ref1['x-auth-token'] : void 0) != null) && req.headers['x-auth-token'] === token) {
       return next();
     } else {
       err = new Error('not authorized');

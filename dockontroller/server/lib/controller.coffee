@@ -40,9 +40,7 @@ module.exports = class DockerCommander
         do ping = ->
             i += 500
             return callback new Error('timeout') if i > timeout
-            console.log(url)
             request.get url, (err, response, body) ->
-                console.log(err)
                 if err then setTimeout ping, 500
                 else callback null
 
@@ -96,10 +94,10 @@ module.exports = class DockerCommander
     updateApplication: (imagename, env, callback) ->
         @uninstallApplication imagename.split('/')[1], (err) =>
             @install imagename, "latest", {}, (err) =>
-                    options = 
-                        PublishAllPorts: true
-                        Links: ['datasystem:datasystem']
-                        Env: env
+                options = 
+                    PublishAllPorts: true
+                    Links: ['datasystem:datasystem']
+                    Env: env
                 @start imagename, options, callback
 
     # uninstall = rmi the image
