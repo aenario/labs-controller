@@ -27,6 +27,12 @@ module.exports =
             application.stop
         ]
 
+    'drones/:id/light-update':
+        post: [
+            utils.checkToken
+            application.update
+        ]
+
     'drones/:id/clean':
         post: [
             utils.checkToken
