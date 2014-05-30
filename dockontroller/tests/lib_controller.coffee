@@ -5,8 +5,10 @@ commander = helpers.commander
 
 describe 'lib/controller.coffee - Controller', ->
 
-    before helpers.stopAllContainers
-    before helpers.deleteAllContainers
+    #before helpers.stopAllContainers
+    #before helpers.deleteAllContainers
+    after helpers.stopAllContainers
+    after helpers.deleteAllContainers
 
     # before helpers.deleteAllImages # should be uncommented for full test, but way too long
 
@@ -63,7 +65,7 @@ describe 'lib/controller.coffee - Controller', ->
                 done err
 
     it 'starts the proxy', (done) ->
-        @timeout 20000
+        @timeout 30000
         commander.startProxy @homePort, done
 
 
@@ -88,18 +90,18 @@ describe 'lib/controller.coffee - Controller', ->
 
     it 'stop an application', (done) ->
         @timeout 5000
-        commander.startApplication 'aenario/labs-controller-nodejsapp', {}, done
+        commander.stop 'labs-controller-nodejsapp', done
 
-    it 'updates an application', (done) ->
+    ###it 'updates an application', (done) ->
         @timeout 5000
         commander.updateApplication 'aenario/labs-controller-nodejsapp', 'v2', done
 
     it 'starts the updated application', (done) ->
 
 
-    it 'downdates while the app is running (not useful, but it cans)', (done) ->
-
-
+    it 'downdates while the app is running (not useful, but it cans)', (done) ->###
 
 
     it 'uninstalls an application', (done) ->
+        @timeout 5000
+        commander.uninstallApplication 'labs-controller-nodejsapp', done

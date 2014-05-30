@@ -87,11 +87,24 @@ module.exports = class DockerCommander
 
         return progress
 
+    # Update =
+    #     * Install new image
+    #     * Uninstall old image
+    #     * Start new image
+    updateApplication: (imagename, env, callback) ->
+        @uninstallApplication imagename.split('/')[1], (err) =>
+            @install imagename, "latest", {}, (err) =>
+                options = 
+                    PublishAllPorts: true
+                    Links: ['datasystem:datasystem']
+                    Env: env
+                @start imagename, options, callback
+
     # uninstall = rmi the image
     uninstallApplication: (slug, callback) ->
         container = @docker.getContainer slug
 
-        @stop slug, (err, image) ->
+        @stop slug, (err, image) =>
             return callback err if err
 
             image = @docker.getImage image

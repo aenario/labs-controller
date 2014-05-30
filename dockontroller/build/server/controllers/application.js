@@ -8,25 +8,28 @@ utils = require('../middlewares/utils');
 commander = new DockerCommander();
 
 install = function(name, app, cb) {
-  if (!commander.exist(name)) {
-    if (name === 'home' || name === 'proxy' || name === 'datasystem') {
-      app.password = utils.getToken();
+  return commander.exist(name, function(err, docExist) {
+    var docker;
+    if (err) {
+      return cb(err);
     }
-    return commander.installApplication("mycozycloud/" + name, name, {
-      env: [
-        {
-          'name': name,
-          'token': app.password
-        }
-      ]
-    }, (function(_this) {
-      return function(err) {
-        return cb(err);
-      };
-    })(this));
-  } else {
-    return cb();
-  }
+    if (!docExist) {
+      if (name === 'home' || name === 'proxy' || name === 'datasystem') {
+        app.password = utils.getToken();
+      }
+      docker = app.repository.url.split('/')[3];
+      if (docker === "mycozycloud") {
+        docker = "cozy";
+      }
+      return commander.install("" + docker + "/" + name, 'latest', {}, (function(_this) {
+        return function(err) {
+          return cb(err);
+        };
+      })(this));
+    } else {
+      return cb();
+    }
+  });
 };
 
 module.exports.start = function(req, res, next) {
@@ -35,6 +38,7 @@ module.exports.start = function(req, res, next) {
   name = app.name;
   return install(name, app, (function(_this) {
     return function(err) {
+      var docker, env;
       if (err != null) {
         next(err);
       }
@@ -61,12 +65,16 @@ module.exports.start = function(req, res, next) {
             return res.send(200, app);
           });
         default:
-          return commander.startApplication(name, function(err, image, port) {
+          env = "NAME=" + name + " TOKEN=" + app.password;
+          docker = app.repository.url.split('/')[3];
+          return commander.startApplication("" + docker + "/" + name, env, function(err, image, port) {
             if (err != null) {
               next(err);
             }
             app.port = port;
-            return res.send(200, app);
+            return res.send(200, {
+              drone: app
+            });
           });
       }
     };
@@ -76,29 +84,74 @@ module.exports.start = function(req, res, next) {
 module.exports.stop = function(req, res, next) {
   var app;
   app = req.body.stop;
-  if (commander.exist(app.name)) {
-    return commander.stop(app.name, function(err, image) {
-      if (err != null) {
-        next(err);
-      }
-      return res.send(200, {});
-    });
-  } else {
-    return res.send(404, {});
-  }
+  return commander.exist(app.name, function(err, docExist) {
+    if (err) {
+      return cb(err);
+    }
+    if (docExist) {
+      return commander.stop(app.name, function(err, image) {
+        if (err != null) {
+          next(err);
+        }
+        return res.send(200, {});
+      });
+    } else {
+      return res.send(404, {});
+    }
+  });
+};
+
+module.exports.update = function(req, res, next) {
+  var app;
+  app = req.body.update;
+  return commander.exist(app.name, function(err, docExist) {
+    var docker, env;
+    if (err) {
+      return cb(err);
+    }
+    if (docExist) {
+      env = "NAME=" + app.name + " TOKEN=" + app.password;
+      docker = app.repository.url.split('/')[3];
+      return commander.updateApplication("" + docker + "/" + app.name, env, (function(_this) {
+        return function(err, image, port) {
+          if (err != null) {
+            next(err);
+          }
+          app.port = port;
+          return res.send(200, {
+            drone: app
+          });
+        };
+      })(this));
+    }
+  });
 };
 
 module.exports.clean = function(req, res, next) {
   var app;
   app = req.body;
-  if (commander.exist(app.name)) {
-    return commander.uninstallApplication(app.name, function(err) {
-      if (err != null) {
-        next(err);
-      }
-      return res.send(200, {});
-    });
-  } else {
-    return res.send(404, {});
-  }
+  return commander.exist(app.name, function(err, docExist) {
+    if (err) {
+      return cb(err);
+    }
+    if (docExist) {
+      return commander.uninstallApplication(app.name, function(err) {
+        if (err != null) {
+          next(err);
+        }
+        return res.send(200, {});
+      });
+    } else {
+      return res.send(404, {});
+    }
+  });
+};
+
+module.exports.running = function(req, res, next) {
+  return commander.running(function(err, result) {
+    if (err) {
+      return nex(err);
+    }
+    return res.send(200, result);
+  });
 };

@@ -43,7 +43,7 @@
   appsPath = '/usr/local/cozy/apps';
 
   getHomePort = function(cb) {
-    return exec('docker ps | grep mycozycloud/home', function(err, body, res) {
+    return exec('docker ps | grep cozy/home', function(err, body, res) {
       var port;
       port = (body.split('0.0.0.0:')[1]).split('->')[0];
       return cb(port);
@@ -119,7 +119,7 @@
           return handleError(null, null, "Install home failed");
         });
       });
-    }, 120000);
+    }, 12000);
     return socket.on('application.update', function(id) {
       var dSclient, token;
       clearTimeout(timeoutId);
@@ -236,41 +236,6 @@
     });
   });
 
-  program.command("install-cozy-stack").description("Install cozy via the Cozy Controller").action(function() {
-    var installApp;
-    installApp = function(name, callback) {
-      manifest.repository.url = "https://github.com/mycozycloud/cozy-" + name + ".git";
-      manifest.name = name;
-      manifest.user = name;
-      console.log("Install started for " + name + "...");
-      return client.clean(manifest, function(err, res, body) {
-        return client.start(manifest, function(err, res, body) {
-          if (err || (body.error != null)) {
-            return handleError(err, body, "Install failed");
-          } else {
-            return client.brunch(manifest, (function(_this) {
-              return function() {
-                console.log("" + name + " successfully installed");
-                return callback(null);
-              };
-            })(this));
-          }
-        });
-      });
-    };
-    return installApp('couchdb', (function(_this) {
-      return function() {
-        return installApp('datasystem', function() {
-          return installApp('home', function() {
-            return installApp('proxy', function() {
-              return console.log('Cozy stack successfully installed');
-            });
-          });
-        });
-      };
-    })(this));
-  });
-
   program.command("uninstall <app>").description("Remove application").action(function(app) {
     console.log("Uninstall started for " + app + "...");
     if (app === 'datasystem' || app === 'home' || app === 'proxy' || app === 'couchdb') {
@@ -297,17 +262,6 @@
         });
       });
     }
-  });
-
-  program.command("uninstall-all").description("Uninstall all apps from controller").action(function(app) {
-    console.log("Uninstall all apps...");
-    return client.cleanAll(function(err, res, body) {
-      if (err || (body.error != null)) {
-        return handleError(err, body, "Uninstall all failed");
-      } else {
-        return console.log("All apps successfully uinstalled");
-      }
-    });
   });
 
   program.command("start <app>").description("Start application").action(function(app) {
@@ -450,39 +404,59 @@
     }
   });
 
-  program.command("restart-cozy-stack").description("Restart cozy trough controller").action(function() {
-    var restartApp;
-    restartApp = function(name, callback) {
-      manifest.repository.url = "https://github.com/mycozycloud/cozy-" + name + ".git";
-      manifest.name = name;
-      manifest.user = name;
-      console.log("Restart started for " + name + "...");
-      return client.stop(manifest, function(err, res, body) {
-        return client.start(manifest, function(err, res, body) {
-          if (err || (body.error != null)) {
-            return handleError(err, body, "Start failed");
+  program.command("update <app>").description("Update application").action(function(app) {
+    console.log("Update " + app + "...");
+    if (app === 'datasystem' || app === 'home' || app === 'proxy' || app === 'couchdb') {
+      return client.lightUpdate(app, function(err, res, body) {
+        if (err || (body.error != null)) {
+          return handleError(err, body, "Stop failed");
+        } else {
+          console.log("" + app + " successfully stopped");
+          console.log("Starting " + app + "...");
+          manifest.name = app;
+          manifest.repository.url = "https://github.com/mycozycloud/cozy-" + app + ".git";
+          manifest.user = app;
+          return client.start(manifest, function(err, res, body) {
+            if (err) {
+              return handleError(err, body, "Start failed");
+            } else {
+              return console.log("" + app + " sucessfully started");
+            }
+          });
+        }
+      });
+    } else {
+      return getHomePort(function(homeport) {
+        var find;
+        homeClient = new Client("http://localhost:" + homeport + "/");
+        find = false;
+        return homeClient.get("api/applications/", function(err, res, apps) {
+          var path, _i, _len, _ref;
+          if ((apps != null) && (apps.rows != null)) {
+            _ref = apps.rows;
+            for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+              manifest = _ref[_i];
+              if (manifest.name === app) {
+                find = true;
+                path = "api/applications/" + manifest.slug + "/update";
+                homeClient.put(path, manifest, function(err, res, body) {
+                  if (err || body.error) {
+                    return handleError(err, body, "Update failed");
+                  } else {
+                    return console.log("" + app + " successfully updated");
+                  }
+                });
+              }
+            }
+            if (!find) {
+              return console.log("Update failed : application " + app + " not found");
+            }
           } else {
-            return client.brunch(manifest, (function(_this) {
-              return function() {
-                console.log("" + name + " successfully started");
-                return callback(null);
-              };
-            })(this));
+            return console.log("Update failed : no applications installed");
           }
         });
       });
-    };
-    return restartApp('couchdb', (function(_this) {
-      return function() {
-        return restartApp('datasystem', function() {
-          return restartApp('home', function() {
-            return restartApp('proxy', function() {
-              return console.log('Cozy stack successfully restarted');
-            });
-          });
-        });
-      };
-    })(this));
+    }
   });
 
   program.command("*").description("Display error message for an unknown command.").action(function() {

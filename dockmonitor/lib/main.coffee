@@ -34,7 +34,7 @@ appsPath = '/usr/local/cozy/apps'
 ## Helpers
 
 getHomePort = (cb) ->
-    exec 'docker ps | grep mycozycloud/home', (err, body, res) ->
+    exec 'docker ps | grep cozy/home', (err, body, res) ->
         port = (body.split('0.0.0.0:')[1]).split('->')[0]
         cb port
 
@@ -87,7 +87,7 @@ waitInstallComplete = (slug, callback) ->
 
                 handleError null, null, "Install home failed"
 
-    , 120000
+    , 12000
 
     socket.on 'application.update', (id) ->
         clearTimeout timeoutId
@@ -184,31 +184,6 @@ program
                             else
                                 handleError null, null, "Install home failed"
 
-program
-    .command("install-cozy-stack")
-    .description("Install cozy via the Cozy Controller")
-    .action () ->
-        installApp = (name, callback) ->
-            manifest.repository.url =
-                    "https://github.com/mycozycloud/cozy-#{name}.git"
-            manifest.name = name
-            manifest.user = name
-            console.log "Install started for #{name}..."
-            client.clean manifest, (err, res, body) ->
-                client.start manifest, (err, res, body)  ->
-                    if err or body.error?
-                        handleError err, body, "Install failed"
-                    else
-                        client.brunch manifest, =>
-                            console.log "#{name} successfully installed"
-                            callback null
-
-        installApp 'couchdb', () =>
-            installApp 'datasystem', () =>
-                installApp 'home', () =>
-                    installApp 'proxy', () =>
-                        console.log 'Cozy stack successfully installed'
-
 # Uninstall
 program
     .command("uninstall <app>")
@@ -232,18 +207,6 @@ program
                         handleError err, body, "Uninstall home failed"
                     else
                         console.log "#{app} successfully uninstalled"
-
-program
-    .command("uninstall-all")
-    .description("Uninstall all apps from controller")
-    .action (app) ->
-        console.log "Uninstall all apps..."
-
-        client.cleanAll (err, res, body) ->
-            if err  or body.error?
-                handleError err, body, "Uninstall all failed"
-            else
-                console.log "All apps successfully uinstalled"
 
 # Start
 program
@@ -354,30 +317,48 @@ program
                             else
                                 console.log "#{app} sucessfully started"
 
+# Update
 program
-    .command("restart-cozy-stack")
-    .description("Restart cozy trough controller")
-    .action () ->
-        restartApp = (name, callback) ->
-            manifest.repository.url =
-                    "https://github.com/mycozycloud/cozy-#{name}.git"
-            manifest.name = name
-            manifest.user = name
-            console.log "Restart started for #{name}..."
-            client.stop manifest, (err, res, body) ->
-                client.start manifest, (err, res, body)  ->
-                    if err or body.error?
-                        handleError err, body, "Start failed"
+    .command("update <app>")
+    .description("Update application")
+    .action (app) ->
+        console.log "Update #{app}..."
+        if app in ['datasystem', 'home', 'proxy', 'couchdb']
+            client.lightUpdate app, (err, res, body) ->
+                if err or body.error?
+                    handleError err, body, "Stop failed"
+                else
+                    console.log "#{app} successfully stopped"
+                    console.log "Starting #{app}..."
+                    manifest.name = app
+                    manifest.repository.url =
+                        "https://github.com/mycozycloud/cozy-#{app}.git"
+                    manifest.user = app
+                    client.start manifest, (err, res, body) ->
+                        if err
+                            handleError err, body, "Start failed"
+                        else
+                            console.log "#{app} sucessfully started"
+        else
+            getHomePort (homeport) ->
+                homeClient = new Client "http://localhost:#{homeport}/"
+                find = false
+                homeClient.get "api/applications/", (err, res, apps) ->
+                    if apps? and apps.rows?
+                        for manifest in apps.rows
+                            if manifest.name is app
+                                find = true
+                                path = "api/applications/#{manifest.slug}/update"
+                                homeClient.put path, manifest, (err, res, body) ->
+                                    if err or body.error
+                                        handleError err, body, "Update failed"
+                                    else
+                                        console.log "#{app} successfully updated"
+                        if not find
+                            console.log "Update failed : application #{app} not found"
                     else
-                        client.brunch manifest, =>
-                            console.log "#{name} successfully started"
-                            callback null
+                        console.log "Update failed : no applications installed"
 
-        restartApp 'couchdb', () =>
-            restartApp 'datasystem', () =>
-                restartApp 'home', () =>
-                    restartApp 'proxy', () =>
-                        console.log 'Cozy stack successfully restarted'
 
 
 program
