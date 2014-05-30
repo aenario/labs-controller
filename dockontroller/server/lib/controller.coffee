@@ -94,7 +94,7 @@ module.exports = class DockerCommander
     updateApplication: (imagename, env, callback) ->
         @uninstallApplication imagename.split('/')[1], (err) =>
             @install imagename, "latest", {}, (err) =>
-                options = 
+                options =
                     PublishAllPorts: true
                     Links: ['datasystem:datasystem']
                     Env: env
@@ -196,8 +196,7 @@ module.exports = class DockerCommander
             if not data.State.Running
                 return doRemove()
 
-
-            @expectedStops[data.Id] = true
+            @expectedStops[data.ID] = true
             container.stop t: 1, (err) ->
                 return callback err if err
                 doRemove()
@@ -267,7 +266,7 @@ module.exports = class DockerCommander
 
                     if err
                         # failled to start, let's try again later
-                        console.log "Failled to start app", event.from
+                        console.log "Failled to start app", event.from, err
                         tryAgain = => @handleEvent event
                         return setTimeout tryAgain, RESTART_TIMEOUT
 
