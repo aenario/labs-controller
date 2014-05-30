@@ -2,6 +2,11 @@ DockerCommander = require '../lib/controller'
 utils = require '../middlewares/utils'
 
 commander = new DockerCommander()
+NotFound = ->
+    err = new Error('Not found')
+    err.statusCode = 404
+    return err
+
 
 install = (name, app, cb) ->
     commander.exist name, (err, docExist) ->
@@ -53,19 +58,20 @@ module.exports.stop = (req, res, next) ->
                 next err if err?
                 res.send 200, {}
         else
-            res.send 404, {}
+            next NotFound()
 
 
 module.exports.clean = (req, res, next) ->
     app = req.body
-    commander.exist name, (err, docExist) ->
+    console.log req.body
+    commander.exist app.name, (err, docExist) ->
         return cb err if err
         if docExist
             commander.uninstallApplication app.name, (err) ->
                 next err if err?
                 res.send 200, {}
         else
-            res.send 404, {}
+            next NotFound()
 
 
 module.exports.running = (req, res, next) ->

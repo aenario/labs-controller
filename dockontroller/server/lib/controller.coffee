@@ -132,6 +132,8 @@ module.exports = class DockerCommander
         # create a container
         @docker.createContainer options, (err) =>
 
+            return callback err if err
+
             console.log "STARTING", slug
             container = @docker.getContainer slug
 
@@ -266,7 +268,10 @@ module.exports = class DockerCommander
 
     # preconfigured start for stack
     startCouch: (callback) ->
-        @start 'cozy/couchdb', {}, callback
+        @start 'cozy/couchdb',
+            Volumes: '/usr/local/var/lib/couchdb' : {}
+            Binds: [ '/data/cozy_couchdb:/usr/local/var/lib/couchdb:rw' ]
+        , callback
 
     startDataSystem: (callback) ->
         @start 'cozy/datasystem',
