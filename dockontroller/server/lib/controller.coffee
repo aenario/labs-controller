@@ -133,7 +133,7 @@ module.exports = class DockerCommander
     # start = create & start a container based on the image
     start: (imagename, params, callback) ->
 
-        slug = imagename.split('/')[1]
+        slug = imagename.split('/')[1].replace 'cozy-', ''
 
         options =
             'name': slug
@@ -319,8 +319,8 @@ module.exports = class DockerCommander
 
     # start a normal application
     # only link to the datasystem
-    startApplication: (slug, env, callback) ->
-        @start slug,
+    startApplication: (imagename, env, callback) ->
+        @start imagename,
             PublishAllPorts: true
             Links: ['datasystem:datasystem']
             Env: env

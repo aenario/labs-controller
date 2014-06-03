@@ -12,16 +12,27 @@ AppExists = ->
     err.statusCode = 401
     return err
 
+parseGitUrl = (url) ->
+    split = url.split '/'
 
-ensureInstalled = (name, app, cb) ->
-    commander.exist name, (err, docExist) ->
+    gituser = split[3]
+    gitname = split[4].split('.')[0]
+    dockeruser = gituser.replace 'mycozycloud', 'cozy'
+    dockername = gitname
+    imagename = dockeruser + '/' + dockername
+    slug = dockername.replace 'cozy-', ''
+
+    return {slug, imagename}
+
+
+ensureInstalled = (slug, app, cb) ->
+    commander.exist slug, (err, docExist) ->
         return cb err if err
         if not docExist
-            if name in ['home', 'proxy', 'datasystem']
+            if slug in ['home', 'proxy', 'datasystem']
                 app.password = utils.getToken()
-            docker = app.repository.url.split('/')[3]
-            docker = "cozy" if docker is "mycozycloud"
-            commander.install "#{docker}/#{name}", 'latest', {}, cb
+            {imagename} = parseGitUrl app.repository.url
+            commander.install imagename, 'latest', {}, cb
         else
             cb AppExists('This app already exists')
 
@@ -31,6 +42,7 @@ module.exports.start = (req, res, next) ->
     name = app.name
     ensureInstalled name, app, (err) =>
         return next err if err?
+        console.log "INSTALLED"
         switch name
             when 'data-system'
                 commander.startDataSystem (err) ->
@@ -46,8 +58,8 @@ module.exports.start = (req, res, next) ->
                     res.send 200, app
             else
                 env = "NAME=#{name} TOKEN=#{app.password}"
-                docker = app.repository.url.split('/')[3]
-                commander.startApplication "#{docker}/#{name}", env, (err, image, port) =>
+                {imagename} = parseGitUrl app.repository.url
+                commander.startApplication imagename, env, (err, image, port) =>
                     next err if err?
                     app.port = port
                     res.send 200, drone: app
@@ -71,8 +83,8 @@ module.exports.update = (req, res, next) ->
         return next err if err
         if docExist
             env = "NAME=#{app.name} TOKEN=#{app.password}"
-            docker = app.repository.url.split('/')[3]
-            commander.updateApplication "#{docker}/#{app.name}", env, (err, image, port) =>
+            {imagename} = parseGitUrl app.repository.url
+            commander.updateApplication imagename, env, (err, image, port) =>
                 next err if err?
                 app.port = port
                 res.send 200, drone: app
